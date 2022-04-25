@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+
+#######################################
+# Interpreter for language IPPcode22  #
+# Author: Adam Balušeskul             #
+# login: xbalus01                     #
+#######################################
+
 import sys
 import re
 import xml.etree.ElementTree as Xml
@@ -70,9 +77,15 @@ one_arg_instr_list = ["DEFVAR", "POPS", "LABEL", "CALL", "JUMP", "PUSHS", "WRITE
 two_arg_instr_list = ["MOVE", "INT2CHAR", "STRLEN", "TYPE", "NOT", "READ"]
 three_arg_instr_list = ["ADD", "SUB", "MUL", "IDIV", "LT", "GT", "EQ", "AND", "OR", "CONCAT",
                         "GETCHAR", "SETCHAR", "STRI2INT", "JUMPIFEQ", "JUMPIFNEQ"]
+var_types = ["int", "string", "bool", "nil"]
 
 
 def raise_err(err):
+    """
+    attaches correct error message to given error and raises the error
+
+    :param err: type of error
+    """
     msg = ""
     if err == ParamsError:
         msg = "missing script parameter (if necessary) or use of forbidden combination of parameters"
@@ -100,6 +113,12 @@ def raise_err(err):
 
 
 def exit_err(err_type, msg):
+    """
+    exits the program with the correct return value and a fitting error message
+
+    :param err_type: type of error
+    :param msg: error message
+    """
     err_num = 0
     if err_type == ParamsError:
         err_num = 10
@@ -131,12 +150,35 @@ def exit_err(err_type, msg):
 
 
 def print_help():
-    print(""
-          "Hi my guys, this is help for you!! Haha I think we will be "
-          "having so much fun with this project!")
+    """
+    prints help on how to run the interpreter and what it does
+    """
+    print("""
+INTERPRETER for language IPPcode22 Help Guide
+
+Script (interpret.py in Python 3.8 programming language) loads XML representation of a program (in IPPcode22), 
+interprets this program using inputs specified by command line parameters and generates output.
+
+Usage: python3.8 interpret.py [OPTION]
+
+OPTIONS - when launching script, user must include either source file or input file (or both)!
+
+--help
+print this help and exit
+
+--source=file
+input file with an XML representation of a source code
+
+--input=file
+file with inputs used for interpretation of a specified source code
+""")
 
 
 def composed_of_whitespace(x):
+    """
+    checks and returns if input string is composed of
+    whitespace characters only
+    """
     if x is not None:
         if re.search("\S+", x):
             return False
@@ -144,6 +186,11 @@ def composed_of_whitespace(x):
 
 
 def process_esc_seq_in_str(string):
+    """
+    replaces escape sequences with actual characters in given string
+
+    :return: string with escape sequences replaced
+    """
     if not string:
         return ""
     for i in range(0, 999):
@@ -153,82 +200,80 @@ def process_esc_seq_in_str(string):
 
 def check_root_attrib(root):
     """
-    :param root: xml tree root
-    :return: 0 if XML structure is correct, 1 if incorrect
+    checks XML correctness of the main program
+
+    :param root: main program root composed of instructions
     """
+    if root.tag != 'program':
+        raise_err(UnexpectedXMLStructure)
+
     root_size = len(root.attrib)
-    if 1 > root_size > 3:
-        return False
-    if not composed_of_whitespace(root.text):
-        return False
-    # check if root has an attribute "language" and if it has more attributes, they are "name" or "description"
+    if 1 > root_size > 3 or not composed_of_whitespace(root.text):
+        raise_err(UnexpectedXMLStructure)
+    # check if root has an attribute "language" and if it has more attributes, if they are "name" or "description"
     if "language" not in root.attrib or root.get("language").upper() != "IPPCODE22" or \
             (root_size == 2 and ("name" not in root.attrib and "description" not in root.attrib)) or \
             (root_size == 3 and ("name" not in root.attrib or "description" not in root.attrib)):
-        return False
-    return True
+        raise_err(UnexpectedXMLStructure)
 
 
-def check_args(instr):
-    argc = len(list(instr))
+def check_arg_xml(argc, instr):
+    """
+    checks XML format of instruction arguments
+
+    :param argc: number of arguments
+    :param instr: instruction to check
+    """
     arg_list = ["arg1", "arg2", "arg3"]
     for i in range(argc):
         curr_arg = instr[i]
         if curr_arg.tag != arg_list[i]:
-            return False
+            raise_err(UnexpectedXMLStructure)
         if not composed_of_whitespace(curr_arg.tail):
-            return False
+            raise_err(UnexpectedXMLStructure)
         if "type" not in curr_arg.attrib or len(curr_arg.attrib) != 1 or len(curr_arg) != 0:
-            return False
-    return True
+            raise_err(UnexpectedXMLStructure)
 
 
-def check_instr_arg_count(instr):
-    instr_opcode = instr.attrib.get("opcode").upper()
-    instr_arg_count = len(list(instr))
-    if instr_opcode in zero_arg_instr_list:
-        if instr_arg_count != 0:
-            return False
-    elif instr_opcode in one_arg_instr_list:
-        if instr_arg_count != 1 or not check_args(instr):
-            return False
-    elif instr_opcode in two_arg_instr_list:
-        if instr_arg_count != 2 or not check_args(instr):
-            return False
-    elif instr_opcode in three_arg_instr_list:
-        if instr_arg_count != 3 or not check_args(instr):
-            return False
-    return True
+def check_instr_xml(root):
+    """
+    checks XML format of root instructions and their arguments
 
-
-def check_instructions(root):
+    :param root: main program composed of instructions
+    """
     for instr in root:
-        if not composed_of_whitespace(instr.text):
-            return False
-        if not composed_of_whitespace(instr.tail):
-            return False
+        i_opcode = instr.attrib.get("opcode").upper()
+        argc = len(list(instr))
+
+        if not composed_of_whitespace(instr.text) or not composed_of_whitespace(instr.tail):
+            raise_err(UnexpectedXMLStructure)
         if instr.tag != "instruction":
-            return False
-        if not check_instr_arg_count(instr):
-            return False
-    return True
+            raise_err(UnexpectedXMLStructure)
 
-
-def check_xml_format(root):
-    if root.tag != 'program':
-        raise_err(UnexpectedXMLStructure)
-    if not check_root_attrib(root):
-        raise_err(UnexpectedXMLStructure)
-    if not check_instructions(root):
-        raise_err(UnexpectedXMLStructure)
+        # check correct argument count depending on instruction opcode
+        if i_opcode in zero_arg_instr_list and argc != 0 or \
+                i_opcode in one_arg_instr_list and argc != 1 or \
+                i_opcode in two_arg_instr_list and argc != 2 or \
+                i_opcode in three_arg_instr_list and argc != 3:
+            raise_err(UnexpectedXMLStructure)
+        check_arg_xml(argc, instr)
 
 
 def check_symb_sem(arg, arg_type, type_to_check):
+    """
+    if given argument type is semantically correct <symb> type, function
+    returns the value of that argument depending on its specific
+    type defined by the user (e.g. "int","string",..)
+
+    :param arg: instruction argument
+    :param arg_type: program-given argument type
+    :param type_to_check: user-given argument type
+    """
     if (arg_type != type_to_check) and (arg_type != "var"):
         raise_err(OperandsError)
     if arg_type == "var":
         var = get_or_update_var(arg, None, False)
-        if var[0] not in ["int", "string", "bool", "nil"]:
+        if var[0] not in var_types:
             raise_err(MissingValError)
         if var[0] != type_to_check:
             raise_err(OperandsError)
@@ -247,6 +292,12 @@ def check_symb_sem(arg, arg_type, type_to_check):
 
 
 def handle_args():
+    """
+    handles program arguments - checks for interpreter input/source or potentially both of them
+    or prints help
+
+    :return: (src, inp): tuple of source file and input file
+    """
     if len(sys.argv) == 2:
         # looking for either help, source or input in a program argument
         arg = sys.argv[1]
@@ -283,6 +334,10 @@ def handle_args():
 
 
 def fill_label_dict_with_labels(root):
+    """
+    attaches program labels with their correct positions and stores
+     them in the label dictionary
+    """
     global LD
     count = 0
     for instr in root:
@@ -290,110 +345,142 @@ def fill_label_dict_with_labels(root):
         if opcode == "LABEL":
             arg = instr[0]
             if arg.text in LD:  # label is already defined
-                return False
-            LD[arg.text] = count  # add {"label": count} into label dict
+                raise_err(SemanticsError)
+            LD[arg.text] = count  # adds {"label": order} into label dict
         count += 1
-    return True
 
 
-def print_interpret_status(iip, executed_i):
+def print_interpreter_status(iip, executed_i):
+    """
+    prints statuses of main elements of the program on standard error output
+
+    :param iip: internal instruction pointer
+    :param executed_i: number of executed instructions
+    """
     global GF, LF, TF, FS, CS, DS
     print(
         """
+----------------------------------------
 Position in code: {0}
-
+----------------------------------------
 Number of executed instructions: {1}
-
+----------------------------------------
 Global Frame
 {2}
-
+----------------------------------------
 Local Frame
 {3}
-
+----------------------------------------
 Temporary Frame
 {4}
-
+----------------------------------------
 Frame Stack
 {5}
-
+----------------------------------------
 Call Stack
 {6}
-
+----------------------------------------
 Data Stack
 {7}
-
+----------------------------------------
 """.format(iip, executed_i, GF, LF, TF, FS, CS, DS, file=sys.stderr)
     )
 
 
-def value_check(frame, var, in_frame):
-    if (frame is None) and (frame != GF):
+def check_in_frame(frame, var):
+    if frame is None and frame != GF:
         raise_err(NonexistentFrameError)
-    if in_frame:
-        if var in frame:
-            raise_err(SemanticsError)
-    else:
-        if var not in frame:
-            raise_err(NonexistentVarError)
+    if var not in frame:
+        raise_err(NonexistentVarError)
+
+
+def check_not_in_frame(frame, var):
+    if frame is None and frame != GF:
+        raise_err(NonexistentFrameError)
+    if var in frame:
+        raise_err(SemanticsError)
 
 
 def define_var(arg):
-    global LF, TF, GF, FS, CS, DS
+    """
+    defines variable in frame determined by the argument
+
+    :param arg: instruction argument
+    """
+    global LF, TF, GF
     frame = arg.text.split("@")[0]
     var = arg.text.split("@")[1]
     if frame == "LF":
-        value_check(LF, var, True)
+        check_not_in_frame(LF, var)
         LF[var] = ["", ""]
     elif frame == "TF":
-        value_check(TF, var, True)
+        check_not_in_frame(TF, var)
         TF[var] = ["", ""]
     elif frame == "GF":
-        value_check(GF, var, True)
+        check_not_in_frame(GF, var)
         GF[var] = ["", ""]
 
 
 def check_is_var_defined(arg):
-    global LF, TF, GF, FS, CS, DS
+    """
+    check if a variable is defined in frame determined by the argument
+
+    :param arg: instruction argument
+    """
+    global LF, TF, GF
     frame = arg.text.split("@")[0]
     var = arg.text.split("@")[1]
     if frame == "LF":
-        value_check(LF, var, False)
+        check_in_frame(LF, var)
     elif frame == "TF":
-        value_check(TF, var, False)
+        check_in_frame(TF, var)
     elif frame == "GF":
-        value_check(GF, var, False)
+        check_in_frame(GF, var)
 
 
 def get_or_update_var(arg, val, to_update):
+    """
+    if to_update is True: updates a variable in frame with a user-given value
+    if to_update is False: returns a variable from frame
+
+    :param arg: instruction argument
+    :param val: value to update the frame with
+    :param to_update: decides if function should update or get value
+    """
     global DS, GF, LF, TF
     frame = arg.text.split("@")[0]
     var = arg.text.split("@")[1]
 
     if frame == "LF":
-        value_check(LF, var, False)
+        check_in_frame(LF, var)
         if to_update:
             LF[var] = [val[0], val[1]]
         else:
             val = LF.get(var)
     elif frame == "TF":
-        value_check(TF, var, False)
+        check_in_frame(TF, var)
         if to_update:
             TF[var] = [val[0], val[1]]
         else:
             val = TF.get(var)
     elif frame == "GF":
-        value_check(GF, var, False)
+        check_in_frame(GF, var)
         if to_update:
             GF[var] = [val[0], val[1]]
         else:
             val = GF.get(var)
-    else:
-        return False
     if not to_update:
         return val
 
 
 def write_var(arg, arg_type, write_on_err):
+    """
+    writes a variable on user-decided output depending on its type
+
+    :param arg: instruction argument
+    :param arg_type: type of argument
+    :param write_on_err: if True, function writes on standard error output, otherwise on standard output
+    """
     if arg_type == "nil":
         var_value = ""
     elif arg_type == "var":
@@ -411,27 +498,38 @@ def write_var(arg, arg_type, write_on_err):
 
 
 def zero_arg_instructions_eval(i_opcode, iip, executed_i):
+    """
+    processes instructions that have zero arguments
+
+    :param i_opcode: instruction opcode
+    :param iip: internal instruction pointer
+    :param executed_i: number of executed instructions
+    :return: None on failure
+    """
     global TF, FS, CS, LF
     if i_opcode == "CREATEFRAME":
         TF = {}
     elif i_opcode == "PUSHFRAME":
         if TF is None:
             raise_err(NonexistentFrameError)
-        FS.append(LF)
         if TF is not None:
-            LF = dict(TF.copy())
+            LF = dict(TF)
+        FS.append(LF)
         TF = None
     elif i_opcode == "POPFRAME":
-        if not LF:
+        if LF is None or not FS:
             raise_err(NonexistentFrameError)
-        TF = LF.copy()
-        LF = FS.pop()
+        TF = FS.pop()
+        if FS:
+            LF = FS[-1]
+        else:
+            LF = None
     elif i_opcode == "RETURN":
         if not CS:
             raise_err(MissingValError)
-        iip = int(CS.pop())
+        iip = int(CS.pop()) - 1
     elif i_opcode == "BREAK":
-        print_interpret_status(iip, executed_i)
+        print_interpreter_status(iip, executed_i)
     else:
         return None
     return iip
@@ -454,7 +552,15 @@ def eval_jump(arg, iip):
 
 
 def one_arg_instructions_eval(instr, i_opcode, iip):
-    global GF, TF, LF, FS, CS, DS, LD
+    """
+    processes instructions that have one argument
+
+    :param instr: current instruction
+    :param i_opcode: instruction opcode
+    :param iip: internal instruction pointer
+    :return: None on failure
+    """
+    global CS, DS
     arg = instr[0]
     arg_type = arg.get("type")
     if i_opcode == "DEFVAR":
@@ -489,28 +595,35 @@ def one_arg_instructions_eval(instr, i_opcode, iip):
     return iip
 
 
-def read(arg1, arg2, input_file):
+def read(to_update, var_type, input_file):
+    """
+    reads from user-specified input file and saves the read variable
+
+    :param to_update: variable to save to
+    :param var_type: type of variable to save
+    :param input_file: input file
+    """
     if input_file is None:
         user_input = input()
     else:
         user_input = input_file.readline()
-        user_input = "nil" if user_input == '' else user_input.strip()
-        
-    arg2_type = arg2.text
+        user_input = "nil" if user_input == '' else user_input.strip()  # empty file
+
+    actual_type = var_type.text
     if user_input == "nil":
         pass
-    elif arg2_type == "int":
+    elif actual_type == "int":
         user_input = int(user_input) if re.search("^[+-]?[0-9]*$", user_input) else "nil"
-    elif arg2_type == "bool":
+    elif actual_type == "bool":
         user_input = "true" if re.search("^true$", user_input, flags=re.I) else "false"
-    elif arg2_type == "string":
+    elif actual_type == "string":
         pass
-    elif arg2_type == "nil":
+    elif actual_type == "nil":
         user_input = "nil"
     else:
         raise_err(SemanticsError)
-    to_make = arg2.text if user_input != "nil" else "nil"
-    get_or_update_var(arg1, [to_make, user_input], True)
+    to_make = var_type.text if user_input != "nil" else "nil"
+    get_or_update_var(to_update, [to_make, user_input], True)
 
 
 def type_eval(arg1, arg2, arg2_type):
@@ -522,37 +635,62 @@ def type_eval(arg1, arg2, arg2_type):
     get_or_update_var(arg1, var, True)
 
 
-def not_eval(arg1, arg2, arg2_type):
+def not_eval(var, symb, symb_type):
+    """
+    processes NOT instruction - negates the value of input boolean
+
+    :param var: stores the result of NOT operation
+    :param symb: symbol to execute the NOT operation on
+    :param symb_type: type of the symbol
+    """
     val = []
-    if arg2_type == "var":
-        val = get_or_update_var(arg2, None, False)
+    if symb_type == "var":
+        val = get_or_update_var(symb, None, False)
         is_nonempty(val)
         if val[0] != "bool":
             raise_err(OperandsError)
-    elif arg2_type == "bool":
-        val = [arg2_type, arg2.text]
+    elif symb_type == "bool":
+        val = [symb_type, symb.text]
     else:
         raise_err(OperandsError)
     if val[1] == "true":
         val[1] = "false"
     else:
         val[1] = "true"
-    get_or_update_var(arg1, val, True)
+    get_or_update_var(var, val, True)
 
 
-def int_to_char_eval(arg1, arg2, arg2_type):
-    int_val = check_symb_sem(arg2, arg2_type, "int")
-    if not (0 < int_val < 1141):
+def int_to_char_eval(var, symb, symb_type):
+    """
+    converts symbol <symb> to char and stores into variable <var>
+
+    :param var: variable to store char to
+    :param symb: symbol to convert to char
+    :param symb_type: type of symbol
+    """
+    max_ascii_val = 1114111
+    int_val = check_symb_sem(symb, symb_type, "int")
+    if not (0 < int_val < max_ascii_val):
         raise_err(StringError)
-    get_or_update_var(arg1, ["string", chr(int_val)], True)
+    get_or_update_var(var, ["string", chr(int_val)], True)
 
 
 def is_nonempty(val):
-    if val[0] not in ["int", "string", "bool", "nil"]:
+    if val[0] not in var_types:
         raise_err(MissingValError)
 
 
 def two_arg_instructions_eval(instr, i_opcode, iip, input_file):
+    """
+    processes instructions that have two arguments
+
+    :param instr: current instruction
+    :param i_opcode: instruction opcode
+    :param iip: internal instruction pointer
+    :param input_file: input file
+
+    :return: None on failure
+    """
     global GF, TF, LF, FS, CS, DS, LD
     arg1 = instr[0]
     arg2 = instr[1]
@@ -579,10 +717,20 @@ def two_arg_instructions_eval(instr, i_opcode, iip, input_file):
     return iip
 
 
-def arithmetic_operations_eval(i_opcode, arg2, arg2_type, arg3, arg3_type):
+def arithmetic_operations_eval(i_opcode, symb1, symb1_type, symb2, symb2_type):
+    """
+    evaluates arithmetic operations ADD, SUB, MUL, IDIV
+
+    :param i_opcode: instruction opcode
+    :param symb1: operator 1
+    :param symb1_type: type of op1
+    :param symb2: operator 2
+    :param symb2_type: type of op2
+    :return: evaluation result
+    """
     result = None
-    n1 = check_symb_sem(arg2, arg2_type, "int")
-    n2 = check_symb_sem(arg3, arg3_type, "int")
+    n1 = check_symb_sem(symb1, symb1_type, "int")
+    n2 = check_symb_sem(symb2, symb2_type, "int")
     if i_opcode == "ADD":
         result = n1 + n2
     elif i_opcode == "SUB":
@@ -596,9 +744,19 @@ def arithmetic_operations_eval(i_opcode, arg2, arg2_type, arg3, arg3_type):
     return result
 
 
-def bool_operations_eval(i_opcode, arg2, arg2_type, arg3, arg3_type):
-    b1 = check_symb_sem(arg2, arg2_type, "bool")
-    b2 = check_symb_sem(arg3, arg3_type, "bool")
+def bool_operations_eval(i_opcode, symb1, symb1_type, symb2, symb2_type):
+    """
+    evaluates boolean operations AND, OR
+
+    :param i_opcode: instruction opcode
+    :param symb1: operator 1
+    :param symb1_type: type of op1
+    :param symb2: operator 2
+    :param symb2_type: type of op2
+    :return: evaluation result
+    """
+    b1 = check_symb_sem(symb1, symb1_type, "bool")
+    b2 = check_symb_sem(symb2, symb2_type, "bool")
     result = None
     if i_opcode == "AND":
         result = "true" if b1 == "true" and b2 == "true" else "false"
@@ -608,6 +766,9 @@ def bool_operations_eval(i_opcode, arg2, arg2_type, arg3, arg3_type):
 
 
 def get_char_in_string_on_pos(arg2, arg2_type, arg3, arg3_type):
+    """
+    returns the character in string on given position
+    """
     arg_str = check_symb_sem(arg2, arg2_type, "string")
     arg_pos = check_symb_sem(arg3, arg3_type, "int")
     if 0 > arg_pos or arg_pos >= len(arg_str):
@@ -615,23 +776,42 @@ def get_char_in_string_on_pos(arg2, arg2_type, arg3, arg3_type):
     return arg_str[arg_pos]
 
 
-def concat_eval(arg2, arg2_type, arg3, arg3_type):
-    s1 = check_symb_sem(arg2, arg2_type, "string")
-    s2 = check_symb_sem(arg3, arg3_type, "string")
+def concat_eval(symb1, symb1_type, symb2, symb2_type):
+    """
+    concatenates two strings (evaluation of operation CONCAT)
+
+    :param symb1: string 1
+    :param symb1_type: type of op1
+    :param symb2: string 2
+    :param symb2_type: type of op2
+    :return: concatenated strings
+    """
+    s1 = check_symb_sem(symb1, symb1_type, "string")
+    s2 = check_symb_sem(symb2, symb2_type, "string")
     if s1 is None or s2 is None:
         return ""
     s = s1 + s2
     return s
 
 
-def set_char_eval(arg1, arg2, arg2_type, arg3, arg3_type):
-    to_replace = get_or_update_var(arg1, None, False)
+def set_char_eval(var, symb1, symb1_type, symb2, symb2_type):
+    """
+    evaluates operation SETCHAR
+
+    :param var: string containing char to modify
+    :param symb1: position in string
+    :param symb1_type: type of symbol 1
+    :param symb2: char to modify to
+    :param symb2_type: type of symbol 2
+    :return: evaluation result
+    """
+    to_replace = get_or_update_var(var, None, False)
     is_nonempty(to_replace)
     if to_replace[0] != "string":
         raise_err(OperandsError)
 
-    arg_pos = check_symb_sem(arg2, arg2_type, "int")
-    arg_str = check_symb_sem(arg3, arg3_type, "string")
+    arg_pos = check_symb_sem(symb1, symb1_type, "int")
+    arg_str = check_symb_sem(symb2, symb2_type, "string")
 
     if 0 > arg_pos or arg_pos >= len(to_replace[1]) or arg_str == "":
         raise_err(StringError)
@@ -643,6 +823,9 @@ def set_char_eval(arg1, arg2, arg2_type, arg3, arg3_type):
 
 
 def get_val(val):
+    """
+    :return: actual processed value of val
+    """
     text = val[1]
     arg_type = val[0]
     if arg_type == "int":
@@ -658,6 +841,12 @@ def get_val(val):
 
 
 def compare_values(i_opcode, arg2, arg2_type, arg3, arg3_type):
+    """
+    prepares two arguments for comparison depending on how
+    they are supposed to be evaluated and compares their values
+
+    :return: comparison of values depending on OPCODE
+    """
     if arg2_type == "var":
         val1 = get_or_update_var(arg2, None, False)
     else:
@@ -666,7 +855,7 @@ def compare_values(i_opcode, arg2, arg2_type, arg3, arg3_type):
         val2 = get_or_update_var(arg3, None, False)
     else:
         val2 = [arg3.get("type"), arg3.text]
-    if val1[0] not in ["int", "string", "bool", "nil"] or val2[0] not in ["int", "string", "bool", "nil"]:
+    if val1[0] not in var_types or val2[0] not in var_types:
         raise_err(MissingValError)
     if val1[0] != "nil" and val2[0] != "nil" and arg2_type != "nil" and arg3_type != "nil":
         if arg2_type != arg3_type and val1[0] != val2[0]:
@@ -686,22 +875,42 @@ def compare_values(i_opcode, arg2, arg2_type, arg3, arg3_type):
         return cmp1 > cmp2
 
 
-def jump_iq_eq_neq_eval(i_opcode, iip, arg1, arg2, arg2_type, arg3, arg3_type, eq_flag):
+def jump_if_eq_neq_eval(i_opcode, iip, i_label, symb1, symb1_type, symb2, symb2_type, eq_flag):
+    """
+    evaluates conditional jumps JUMPIFEQ, JUMPIFNEQ
+
+    :param i_opcode: instruction opcode
+    :param iip: internal instruction pointer
+    :param i_label: label to jump to
+    :param symb1: operator 1 to compare
+    :param symb1_type: type of op1
+    :param symb2: operator 2 to compare
+    :param symb2_type: type of op2
+    :param eq_flag: differentiates between jump if EQ and NOT EQ
+    :return: evaluation result
+    """
     global LD
-    if arg1.text not in LD:
+    if i_label.text not in LD:
         raise_err(SemanticsError)
-    eq = compare_values(i_opcode, arg2, arg2_type, arg3, arg3_type)
+    eq = compare_values(i_opcode, symb1, symb1_type, symb2, symb2_type)
     if eq_flag:
         if eq:
-            return int(LD.get(arg1.text)) - 1
+            return int(LD.get(i_label.text)) - 1
     else:
         if not eq:
-            return int(LD.get(arg1.text)) - 1
+            return int(LD.get(i_label.text)) - 1
     return iip
 
 
 def three_arg_instructions_eval(instr, i_opcode, iip):
-    global GF, TF, LF, FS, CS, LD
+    """
+    processes instructions that have three arguments
+
+    :param instr: current instruction
+    :param i_opcode: instruction opcode
+    :param iip: internal instruction pointer
+    :return: None on failure
+    """
     arg1 = instr[0]
     arg2 = instr[1]
     arg2_type = arg2.get("type")
@@ -742,9 +951,9 @@ def three_arg_instructions_eval(instr, i_opcode, iip):
         val = ["string", replaced]
         get_or_update_var(arg1, val, True)
     elif i_opcode == "JUMPIFEQ":
-        iip = jump_iq_eq_neq_eval(i_opcode, iip, arg1, arg2, arg2_type, arg3, arg3_type, True)
+        iip = jump_if_eq_neq_eval(i_opcode, iip, arg1, arg2, arg2_type, arg3, arg3_type, True)
     elif i_opcode == "JUMPIFNEQ":
-        iip = jump_iq_eq_neq_eval(i_opcode, iip, arg1, arg2, arg2_type, arg3, arg3_type, False)
+        iip = jump_if_eq_neq_eval(i_opcode, iip, arg1, arg2, arg2_type, arg3, arg3_type, False)
     else:
         return None
     return iip
@@ -758,7 +967,12 @@ def count_instr(root):
 
 
 def eval_instructions(root, input_file):
-    global GF, TF, LF, FS, CS
+    """
+    evaluate all instructions in program (root)
+
+    :param root: main program composed of instructions
+    :param input_file: input file
+    """
     executed_i = -1  # number of executed instructions
     iip = 0  # internal instruction pointer
     count = count_instr(root)
@@ -775,16 +989,19 @@ def eval_instructions(root, input_file):
         elif i_opcode in three_arg_instr_list:
             iip = three_arg_instructions_eval(instr, i_opcode, iip)
         else:
-            return False
+            raise_err(SemanticsError)
         if iip is None:
-            return False
+            raise_err(SemanticsError)
         iip += 1
-    # TODO file exists check
-    return True
 
 
 def sort_root(root):
-    # sorts instructions
+    """
+    sorts instructions in program (root)
+
+    :param root: main program composed of instructions
+    :return: sorted root
+    """
     has_vals = []
     for i in root:
         if type(i.get("order")) != str:
@@ -801,9 +1018,15 @@ def sort_root(root):
     return root
 
 
-def check_instr_sem(arg, type_to_check):
+def check_arg_sem(arg, type_to_check):
+    """
+    checks semantics of an argument
+
+    :param arg: argument to check value in
+    :param type_to_check: user-defined type to check
+    """
     arg_type = arg.get("type")
-    symb = ["int", "bool", "string", "nil", "var"]
+    symb = var_types + ["var"]
     if type_to_check == "symb":
         if arg_type not in symb:
             raise_err(XMLFormatError)
@@ -813,13 +1036,16 @@ def check_instr_sem(arg, type_to_check):
 
 
 def semantics_check(root):
+    """
+    checks correctness of semantics in program (root)
+
+    :param root: main program composed of instructions
+    """
     for instr in root:
         i_opcode = instr.get("opcode")
-        if i_opcode is not None:
-            i_opcode = i_opcode.upper()
-        else:
+        if i_opcode is None:
             raise_err(UnexpectedXMLStructure)
-
+        i_opcode = i_opcode.upper()
         var_fst_arg = ["MOVE", "DEFVAR", "POPS", "ADD", "SUB", "MUL", "IDIV", "LT", "GT", "EQ", "AND", "OR", "NOT",
                        "INT2CHAR", "STRI2INT", "READ", "CONCAT", "STRLEN", "GETCHAR", "SETCHAR", "TYPE"]
         label_fst_arg = ["CALL", "LABEL", "JUMP", "JUMPIFEQ", "JUMPIFNEQ"]
@@ -829,22 +1055,26 @@ def semantics_check(root):
             if len(instr) < 1:
                 raise_err(UnexpectedXMLStructure)
         if i_opcode in var_fst_arg:
-            check_instr_sem(instr[0], "var")
+            check_arg_sem(instr[0], "var")
         elif i_opcode in label_fst_arg:
-            check_instr_sem(instr[0], "label")
+            check_arg_sem(instr[0], "label")
         elif i_opcode in symb_fst_arg:
-            check_instr_sem(instr[0], "symb")
+            check_arg_sem(instr[0], "symb")
         if i_opcode not in not_symb_snd_arg:
             if len(instr) < 2:
                 raise_err(UnexpectedXMLStructure)
-            check_instr_sem(instr[1], "symb")
+            check_arg_sem(instr[1], "symb")
         if i_opcode in three_arg_instr_list:
             if len(instr) < 3:
                 raise_err(UnexpectedXMLStructure)
-            check_instr_sem(instr[2], "symb")
+            check_arg_sem(instr[2], "symb")
 
 
 def run():
+    """
+    checks semantics of input XML structure and executes
+    program instructions in correct order
+    """
     src, inp = handle_args()
     tree = Xml.parse(src)
     root = tree.getroot()
@@ -855,21 +1085,19 @@ def run():
         input_file = open(inp, "r")
 
     semantics_check(root)
-    fld_error_check = fill_label_dict_with_labels(root)
-    if not fld_error_check:
-        raise_err(SemanticsError)
-
-    check_xml_format(root)
-
-    eval_error_check = eval_instructions(root, input_file)
-    if not eval_error_check:
-        raise_err(SemanticsError)
+    fill_label_dict_with_labels(root)
+    check_root_attrib(root)
+    check_instr_xml(root)
+    eval_instructions(root, input_file)
 
     if input_file is not None:
         input_file.close()
 
 
 def catch_exceptions_and_launch():
+    """
+    runs the program and catches any error exceptions along the way
+    """
     try:
         run()
     except SemanticsError as e:
