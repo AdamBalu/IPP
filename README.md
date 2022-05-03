@@ -1,4 +1,4 @@
-# IPP - projekty
+# IPP projekt
 
 | **Projekt**  | **BODY** |
 |:------------:|:--------|
